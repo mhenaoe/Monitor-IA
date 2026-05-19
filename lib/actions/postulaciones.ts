@@ -6,7 +6,6 @@ import { revalidatePath } from "next/cache";
 
 // ─────────────────────────────────────────────
 // HU-13 + HU-16 + HU-17: Postularse Fase 1
-//   con validación automática y bloqueo
 // ─────────────────────────────────────────────
 export async function postularseFase1(
   convocatoriaId: string,
@@ -18,7 +17,6 @@ export async function postularseFase1(
   }
 
   try {
-    // Verificar que la convocatoria está publicada
     const convocatoria = await db.convocatoria.findFirst({
       where: { id: convocatoriaId, estado: "PUBLICADA" },
       include: { criterios: true, curso: true },
@@ -29,7 +27,6 @@ export async function postularseFase1(
       return { error: "La convocatoria ya cerró" };
     }
 
-    // Verificar que no se haya postulado antes (constraint @@unique)
     const existente = await db.postulacion.findUnique({
       where: {
         estudianteId_convocatoriaId: {
@@ -40,13 +37,11 @@ export async function postularseFase1(
     });
     if (existente) return { error: "Ya te postulaste a esta convocatoria" };
 
-    // HU-16: Validación automática de criterios Fase 1
     const estudiante = await db.estudiante.findUnique({
       where: { id: session.user.estudianteId },
     });
     if (!estudiante) return { error: "Perfil de estudiante no encontrado" };
 
-    // Separar respuestas: preguntas abiertas (preguntasFase1) vs criterios manuales
     const respuestasManuales: Record<string, string> = {};
     for (const criterio of convocatoria.criterios) {
       if (criterio.tipo === "MANUAL" && respuestas[criterio.campo]) {
@@ -60,9 +55,7 @@ export async function postularseFase1(
       respuestasManuales
     );
 
-    // HU-17: Bloqueo por incumplimiento
     if (!resultadoValidacion.aprobado) {
-      // Registrar postulación RECHAZADA
       await db.postulacion.create({
         data: {
           estudianteId: session.user.estudianteId!,
@@ -73,7 +66,6 @@ export async function postularseFase1(
         },
       });
 
-      // HU-15: Notificación de rechazo
       await db.notificacion.create({
         data: {
           tipo: "RECHAZO_FASE_1",
@@ -91,7 +83,6 @@ export async function postularseFase1(
       };
     }
 
-    // Aprobó Fase 1 — crear postulación activa
     const postulacion = await db.postulacion.create({
       data: {
         estudianteId: session.user.estudianteId!,
@@ -133,7 +124,6 @@ function validarCriterios(
 
   for (const criterio of criterios) {
     if (criterio.tipo === "AUTOMATICO_SIS") {
-      // ─── Automático: evalúa contra datos del SA ───
       const valorEstudiante = getValorEstudiante(criterio.campo, estudiante);
       if (valorEstudiante === null) continue;
 
@@ -155,7 +145,6 @@ function validarCriterios(
         );
       }
     } else if (criterio.tipo === "MANUAL") {
-      // ─── Manual: evalúa contra respuesta del formulario ───
       const respuestaEstudiante = respuestasManuales[criterio.campo]?.trim();
 
       if (!respuestaEstudiante) {
@@ -166,7 +155,6 @@ function validarCriterios(
       const valorEsperado = criterio.valor.trim();
       let cumple = false;
 
-      // Comparación case-insensitive
       switch (criterio.operador) {
         case "==":
           cumple = respuestaEstudiante.toLowerCase() === valorEsperado.toLowerCase();
@@ -199,14 +187,10 @@ function getValorEstudiante(
   }
 ): number | null {
   switch (campo) {
-    case "promedioAcumulado":
-      return estudiante.promedioAcumulado;
-    case "semestre":
-      return estudiante.semestre;
-    case "creditosAprobados":
-      return estudiante.creditosAprobados;
-    default:
-      return null;
+    case "promedioAcumulado": return estudiante.promedioAcumulado;
+    case "semestre": return estudiante.semestre;
+    case "creditosAprobados": return estudiante.creditosAprobados;
+    default: return null;
   }
 }
 
@@ -217,7 +201,6 @@ export async function obtenerCandidatos(convocatoriaId: string) {
   const session = await auth();
   if (!session || session.user.rol !== "DOCENTE") return [];
 
-  // Verificar que la convocatoria es del docente
   const conv = await db.convocatoria.findFirst({
     where: { id: convocatoriaId, docenteId: session.user.docenteId },
   });
@@ -226,14 +209,10 @@ export async function obtenerCandidatos(convocatoriaId: string) {
   return db.postulacion.findMany({
     where: {
       convocatoriaId,
-      estado: {
-        in: ["APROBADA_FASE_1", "APROBADA_FASE_2", "ACEPTADO", "DENEGADO"],
-      },
+      estado: { in: ["APROBADA_FASE_1", "APROBADA_FASE_2", "ACEPTADO", "DENEGADO"] },
     },
     include: {
-      estudiante: {
-        include: { usuario: true },
-      },
+      estudiante: { include: { usuario: true } },
     },
     orderBy: [
       { puntajeIA: { sort: "desc", nulls: "last" } },
@@ -244,7 +223,6 @@ export async function obtenerCandidatos(convocatoriaId: string) {
 
 // ─────────────────────────────────────────────
 // HU-23 + HU-25: Aceptar o rechazar candidato
-//   (con notificación del resultado)
 // ─────────────────────────────────────────────
 export async function actualizarEstadoCandidato(
   postulacionId: string,
@@ -256,7 +234,6 @@ export async function actualizarEstadoCandidato(
   }
 
   try {
-    // Verificar que la postulación pertenece a una convocatoria del docente
     const existente = await db.postulacion.findUnique({
       where: { id: postulacionId },
       include: { convocatoria: true },
@@ -276,7 +253,6 @@ export async function actualizarEstadoCandidato(
       },
     });
 
-    // HU-25: Notificación del resultado
     const esAceptado = nuevoEstado === "ACEPTADO";
     await db.notificacion.create({
       data: {
@@ -323,8 +299,6 @@ export async function asignarMonitor(postulacionId: string) {
       return { error: "Solo se pueden asignar candidatos aceptados" };
     }
 
-    // En el Release 1 la asignación es conceptual (cambio de estado).
-    // En el Release 2 se creará la entidad Monitoria + Monitor.
     revalidatePath("/docente/revision");
     return { success: true };
   } catch {
@@ -335,7 +309,6 @@ export async function asignarMonitor(postulacionId: string) {
 // ─────────────────────────────────────────────
 // Consultas para el estudiante
 // ─────────────────────────────────────────────
-
 export async function obtenerConvocatoriasActivas() {
   const session = await auth();
   if (!session || !session.user.estudianteId) return [];
@@ -345,7 +318,7 @@ export async function obtenerConvocatoriasActivas() {
   });
   if (!estudiante) return [];
 
-  const convocatorias = await db.convocatoria.findMany({
+  return db.convocatoria.findMany({
     where: {
       estado: "PUBLICADA",
       curso: { programa: estudiante.programa },
@@ -362,8 +335,6 @@ export async function obtenerConvocatoriasActivas() {
     },
     orderBy: { fechaFin: "asc" },
   });
-
-  return convocatorias;
 }
 
 export async function obtenerMisPostulaciones() {
@@ -384,10 +355,6 @@ export async function obtenerMisPostulaciones() {
   });
 }
 
-// ─────────────────────────────────────────────
-// Obtener detalle de convocatoria para estudiante
-// Con criterios + estado de postulación si existe
-// ─────────────────────────────────────────────
 export async function obtenerDetalleConvocatoria(convocatoriaId: string) {
   const session = await auth();
   if (!session || !session.user.estudianteId) return null;
@@ -416,9 +383,146 @@ export async function obtenerDetalleConvocatoria(convocatoriaId: string) {
   });
 
   if (!convocatoria) return null;
-
-  // Validar que pertenece al programa del estudiante
   if (convocatoria.curso.programa !== estudiante.programa) return null;
 
   return convocatoria;
+}
+
+// ─────────────────────────────────────────────
+// HU-14: Postularse a Fase 2 (subir hoja de vida)
+// ─────────────────────────────────────────────
+export async function postularseFase2(formData: FormData) {
+  const session = await auth();
+  if (!session || session.user.rol !== "ESTUDIANTE") {
+    return { error: "No autorizado" };
+  }
+
+  const postulacionId = formData.get("postulacionId") as string;
+  const hojaDeVidaUrl = formData.get("hojaDeVidaUrl") as string;
+
+  if (!postulacionId || !hojaDeVidaUrl) {
+    return { error: "Datos incompletos" };
+  }
+
+  try {
+    const postulacion = await db.postulacion.findFirst({
+      where: {
+        id: postulacionId,
+        estudianteId: session.user.estudianteId!,
+        estado: "APROBADA_FASE_1",
+      },
+    });
+
+    if (!postulacion) {
+      return { error: "Postulación no encontrada o no elegible para Fase 2" };
+    }
+
+    await db.postulacion.update({
+      where: { id: postulacionId },
+      data: {
+        hojaDeVidaUrl,
+        faseActual: "FASE_2",
+        estado: "APROBADA_FASE_2",
+      },
+    });
+
+    revalidatePath("/estudiante/mural");
+    revalidatePath("/estudiante/postulaciones");
+    revalidatePath("/docente/revision");
+    return { success: true };
+  } catch {
+    return { error: "Error al procesar la Fase 2" };
+  }
+}
+
+// ─────────────────────────────────────────────
+// HU-20: Ranking de candidatos con IA
+// ─────────────────────────────────────────────
+export async function calcularRankingIA(convocatoriaId: string) {
+  const session = await auth();
+  if (!session || session.user.rol !== "DOCENTE") {
+    return { error: "No autorizado" };
+  }
+
+  try {
+    const postulaciones = await db.postulacion.findMany({
+      where: {
+        convocatoriaId,
+        estado: { in: ["APROBADA_FASE_1", "APROBADA_FASE_2"] },
+      },
+      include: {
+        estudiante: { include: { usuario: true } },
+        convocatoria: { include: { curso: true } },
+      },
+    });
+
+    if (postulaciones.length === 0) {
+      return { error: "No hay candidatos para evaluar" };
+    }
+
+    const curso = postulaciones[0].convocatoria.curso.nombre;
+
+    const resultados = await Promise.all(
+      postulaciones.map(async (p) => {
+        const respuestas = p.respuestasFase1 as Record<string, string> | null;
+        if (!respuestas) return { id: p.id, puntaje: 0 };
+
+        const respuestasTexto = Object.entries(respuestas)
+          .map(([key, val]) => `${key}: ${val}`)
+          .join("\n");
+
+        const prompt = `Eres un evaluador académico. Evalúa la siguiente postulación para ser monitor del curso "${curso}".
+
+Respuestas del candidato:
+${respuestasTexto}
+
+Datos académicos:
+- Promedio: ${p.estudiante.promedioAcumulado}
+- Semestre: ${p.estudiante.semestre}
+
+Asigna un puntaje del 0 al 10 basándote en:
+1. Calidad y profundidad de las respuestas
+2. Motivación demostrada
+3. Experiencia relevante mencionada
+4. Adecuación al perfil de monitor
+
+Responde ÚNICAMENTE con un número decimal entre 0 y 10. Ejemplo: 7.5`;
+
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.1, maxOutputTokens: 10 },
+              }),
+            }
+          );
+
+          const data = await response.json();
+          const texto = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "0";
+          const puntaje = Math.min(10, Math.max(0, parseFloat(texto) || 0));
+          return { id: p.id, puntaje };
+        } catch {
+          return { id: p.id, puntaje: 0 };
+        }
+      })
+    );
+
+    await Promise.all(
+      resultados.map((r) =>
+        db.postulacion.update({
+          where: { id: r.id },
+          data: { puntajeIA: r.puntaje },
+        })
+      )
+    );
+
+    revalidatePath("/docente/revision");
+    return { success: true, resultados };
+  } catch {
+    return { error: "Error al calcular el ranking" };
+  }
 }
