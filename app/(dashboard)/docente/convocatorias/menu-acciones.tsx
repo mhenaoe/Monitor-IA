@@ -11,6 +11,7 @@ import {
   Users,
   Loader2,
   AlertCircle,
+  Edit,
 } from "lucide-react";
 import type { EstadoConvocatoria } from "@prisma/client";
 import {
@@ -160,6 +161,17 @@ export function MenuAcciones({ id, estado, tieneCriterios }: Props) {
               icon={Eye}
             >
               Ver candidatos
+            </MenuItem>
+          )}
+
+          {/* Editar — disponible en BORRADOR y PUBLICADA */}
+          {(estado === "BORRADOR" || estado === "PUBLICADA") && (
+            <MenuItem
+              as={Link}
+              href={`/docente/convocatorias/${id}/editar`}
+              icon={Edit}
+            >
+              Editar
             </MenuItem>
           )}
 

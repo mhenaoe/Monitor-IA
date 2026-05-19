@@ -301,3 +301,52 @@ export async function obtenerConvocatoriasConCandidatos() {
     orderBy: { creadoEn: "desc" },
   });
 }
+export async function editarConvocatoria(formData: FormData) {
+  const session = await auth();
+  if (!session || session.user.rol !== "DOCENTE") {
+    return { error: "No autorizado" };
+  }
+
+  const id = formData.get("id") as string;
+  const cursoId = formData.get("cursoId") as string;
+  const fechaInicio = formData.get("fechaInicio") as string;
+  const fechaFin = formData.get("fechaFin") as string;
+  const preguntasFase1 = JSON.parse(
+    (formData.get("preguntasFase1") as string) || "[]"
+  );
+
+  if (!id || !fechaInicio || !fechaFin) {
+    return { error: "Datos incompletos" };
+  }
+
+  if (new Date(fechaInicio) >= new Date(fechaFin)) {
+    return { error: "La fecha de inicio debe ser anterior a la de cierre" };
+  }
+
+  try {
+    const conv = await db.convocatoria.findFirst({
+      where: { id, docenteId: session.user.docenteId! },
+    });
+    if (!conv) return { error: "Convocatoria no encontrada" };
+
+    const data: Record<string, unknown> = {
+      fechaInicio: new Date(fechaInicio),
+      fechaFin: new Date(fechaFin),
+      preguntasFase1,
+    };
+
+    if (conv.estado === "BORRADOR") {
+      data.cursoId = cursoId;
+    }
+
+    await db.convocatoria.update({
+      where: { id },
+      data,
+    });
+
+    revalidatePath("/docente/convocatorias");
+    return { success: true };
+  } catch {
+    return { error: "Error al actualizar la convocatoria" };
+  }
+}
