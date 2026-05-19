@@ -1,0 +1,500 @@
+# 📘 MonitorIA — Guía de Exposición
+
+**Proyecto:** Sistema de Gestión de Monitorías Académicas
+**Universidad:** Universidad de Medellín · Módulo Púrpura
+**Release:** 1 (Sprint 1–2, Flujo Básico)
+**Autor:** Esteban Chavarría
+
+---
+
+## 🎯 Qué es MonitorIA
+
+MonitorIA es una plataforma web que digitaliza el proceso de selección y
+gestión de monitores académicos en la Universidad de Medellín.
+
+**Problema que resuelve:**
+Hoy el proceso es manual, disperso en correos y formularios de Google. Los
+docentes pierden tiempo filtrando candidatos que no cumplen requisitos mínimos,
+y los estudiantes no tienen un lugar centralizado para ver y postularse a
+convocatorias.
+
+**Propuesta:**
+Un flujo digital de punta a punta: el docente publica convocatorias con
+criterios automáticos de validación, los estudiantes se postulan, el sistema
+filtra automáticamente a quienes no cumplen requisitos, y el docente solo ve
+candidatos válidos sobre los que decidir.
+
+**Valor diferencial (Release 2):**
+Ranking con IA que ayuda al docente a comparar candidatos cualificados usando
+sus respuestas a preguntas abiertas.
+
+---
+
+## 🧱 Stack Técnico
+
+| Capa | Tecnología |
+|------|------------|
+| Frontend | Next.js 15 (App Router) + TypeScript |
+| Estilos | Tailwind CSS 3.4 |
+| Backend | Next.js Server Actions + Zod |
+| ORM | Prisma 6 |
+| Base de datos | PostgreSQL (Neon, serverless) |
+| Autenticación | NextAuth v5 con credenciales institucionales |
+| Iconografía | Lucide React |
+
+**Decisiones arquitectónicas defendibles:**
+- **Server Actions sobre API REST:** menos código, tipado end-to-end, sin
+  serialización manual.
+- **Herencia por composición en DB:** tabla `usuarios` + tablas de perfil
+  (`estudiantes`, `docentes`, `monitores`) relacionadas 1:1. Evita el
+  anti-patrón de una tabla gigante con columnas NULL.
+- **Wizard multi-paso para crear convocatorias:** cada paso guarda
+  incrementalmente, no hay estados inválidos en memoria del cliente.
+- **Validación dual (Zod cliente + Zod servidor):** misma librería en ambos
+  lados, single source of truth.
+
+---
+
+## 👥 Roles y usuarios de prueba
+
+| Rol | Correo | Escenario |
+|-----|--------|-----------|
+| Docente | `docente@udem.edu.co` | Crea convocatorias, define criterios, elige monitores |
+| Estudiante (ideal) | `estudiante@udem.edu.co` | Cumple requisitos, pasa filtros |
+| Estudiante (rechazo) | `maria@udem.edu.co` | No cumple requisitos, prueba HU-17 |
+| Estudiante extra | `carlos@udem.edu.co` | Segundo candidato válido |
+
+> **Nota para la demo:** usa los botones "Iniciar sesión como…" del modo
+> desarrollo. No hay contraseña manual — esto se integrará con Azure AD
+> (Office 365 institucional) en producción.
+
+---
+
+## 🗺️ Mapa de páginas
+
+```
+PÚBLICAS
+└── /login                           Landing con stats y 3 cards por rol
+    ├── /login/docente               Formulario de login
+    ├── /login/estudiante
+    └── /login/monitor               (Release 2)
+
+DOCENTE (protegidas)
+├── /docente/convocatorias           Tabla de sus convocatorias + acciones
+│   └── /nueva                       Wizard 2 pasos (datos + criterios)
+│       ├── ?step=1                  Curso, fechas, preguntas
+│       └── ?step=2&id=xxx           Criterios de validación
+├── /docente/criterios               Gestión standalone de criterios
+│   └── ?convocatoria=xxx            Deep-link desde tabla
+├── /docente/revision                Ranking de candidatos + elegir/rechazar
+│   └── ?convocatoria=xxx            Deep-link
+└── /docente/seguimiento             (Release 2, deshabilitado)
+
+ESTUDIANTE (protegidas)
+├── /estudiante/mural                Grid de convocatorias activas del programa
+│   └── /mural/[id]                  Detalle + formulario de postulación
+└── /estudiante/postulaciones        Historial con pestañas (activas/aceptadas/rechazadas)
+```
+
+---
+
+# 🎬 GUIÓN DE DEMO — 12 a 15 minutos
+
+Esta sección está escrita como un **guión narrativo**. Cada escena tiene un
+objetivo pedagógico y muestra una o varias historias de usuario (HU) del plan.
+
+> **Recomendación de preparación:**
+> 1. Abre dos ventanas del navegador — una normal (`localhost:3000`) y una
+>    incógnito (para cambiar de rol sin hacer logout constante).
+> 2. Abre Prisma Studio en otra pestaña (`localhost:5555`) para mostrar los
+>    datos en vivo si el profesor pregunta "¿y eso se guarda dónde?".
+> 3. Ten la consola de Neon abierta por si pide ver el SQL.
+
+---
+
+## 🎭 ACTO 1 — El docente prepara el proceso (4 min)
+
+### Escena 1: Landing pública y autenticación (HU-01)
+
+**Qué decir:**
+> "Cualquier usuario que entre al sistema ve esta landing pública con tres
+> caminos diferenciados: docente, estudiante y monitor. Las estadísticas de
+> convocatorias activas y postulados son **dinámicas**, vienen de la base de
+> datos en tiempo real."
+
+**Qué hacer:**
+1. Entra a `http://localhost:3000` → te redirige a `/login`
+2. Muestra los stats del hero (X convocatorias activas, Y postulados)
+3. Clic en card **"Docente"**
+4. En el form, clic en "Usar cuenta de prueba: docente@udem.edu.co"
+
+**Qué probaste:** HU-01 + protección de rutas por rol.
+
+---
+
+### Escena 2: Vista general del dashboard docente
+
+**Qué decir:**
+> "Apenas entro ya veo mi navbar con mi rol, mi sidebar con las 4 secciones
+> del proceso, y mi tabla de convocatorias. El ítem **Seguimiento** está
+> deshabilitado con un badge 'R2' — es trabajo del próximo release y decidí
+> mostrarlo visible para comunicar claramente la hoja de ruta del producto."
+
+**Qué hacer:**
+1. Ya estás en `/docente/convocatorias`
+2. Señala la tabla con las 2 convocatorias del seed
+3. Señala los badges de estado (Publicada = violeta, Borrador = teal)
+4. Clic en `⋮` de una publicada → muestra menú contextual
+
+**Qué probaste:** layout profesional + rol-awareness + hoja de ruta visible.
+
+---
+
+### Escena 3: Crear una convocatoria (HU-05, HU-06)
+
+**Qué decir:**
+> "El proceso de crear una convocatoria lo diseñé como un **wizard de dos
+> pasos** en vez de un formulario gigante. La razón: los criterios de
+> validación pueden ser muchos y cambiar con el tiempo, entonces conceptualmente
+> son un recurso aparte. Además, si el docente se va a la mitad del proceso,
+> el paso 1 queda guardado en borrador y no pierde trabajo."
+
+**Qué hacer:**
+1. Clic en **"+ Nueva"** → `/docente/convocatorias/nueva?step=1`
+2. Muestra el indicador de progreso arriba (círculo 1 activo, 2 gris)
+3. Selecciona curso → Cálculo Diferencial
+4. Fechas: hoy + 1 día / hoy + 15 días
+5. Agrega 2 preguntas abiertas:
+   - "¿Por qué quieres ser monitor de este curso?"
+   - "Describe tu experiencia previa con la materia"
+6. Clic "Siguiente: Criterios"
+
+**Qué decir en el paso 2:**
+> "Aquí defino los **criterios de validación automática**. Tengo dos tipos:
+> **automáticos** (se validan contra el sistema académico: promedio, semestre,
+> créditos) y **manuales** (son preguntas con respuesta esperada, como
+> '¿Ya cursaste Cálculo Integral?'). El motor de validación evalúa ambos al
+> momento que el estudiante se postula."
+
+**Qué hacer:**
+7. Agrega criterio automático: `Promedio ≥ 4.0`
+8. Agrega criterio automático: `Semestre ≥ 3`
+9. Agrega criterio manual: `¿Cursaste Cálculo Integral? == Si`
+10. Clic "Publicar ahora" → confirma
+
+**Qué probaste:**
+- HU-05 (crear), HU-06 (preguntas + criterios), HU-07 (publicar)
+- Separación de concerns en la arquitectura
+- Manejo de tipos diferentes con la misma UI
+
+---
+
+### Escena 4: Notificaciones automáticas (HU-10)
+
+**Qué decir:**
+> "Al publicar la convocatoria, el sistema notificó automáticamente a todos
+> los estudiantes del programa. En este release guardamos las notificaciones
+> en la tabla `notificaciones` con estado `PENDIENTE`. En producción, un cron
+> job las enviaría por correo institucional con Azure Communication Services.
+> El diseño ya soporta ese siguiente paso."
+
+**Qué hacer (opcional):**
+1. Cambia a Prisma Studio (otra pestaña)
+2. Tabla `notificaciones` → muestra las filas recién creadas
+
+**Qué probaste:** HU-10 + diseño escalable.
+
+---
+
+## 🎭 ACTO 2 — Los estudiantes se postulan (4 min)
+
+### Escena 5: Logout y login como estudiante
+
+**Qué hacer:**
+1. En el navbar, icono de salida arriba a la derecha
+2. Landing → clic card **"Estudiante"** → login con `estudiante@udem.edu.co`
+
+### Escena 6: El mural (HU-11)
+
+**Qué decir:**
+> "Apenas entro como estudiante, el sistema me muestra únicamente las
+> convocatorias **de mi programa**. Otros programas no aparecen. Esto es
+> importante: el filtrado no es del lado del cliente, sino que el Server Action
+> consulta solo lo que corresponde a mi carrera. Es una decisión de
+> privacidad y eficiencia."
+
+**Qué hacer:**
+1. `/estudiante/mural` — grid de cards
+2. Señala el contador "X activas" y el buscador
+3. Explica los indicadores visuales: "Último día" en ámbar si quedan ≤3 días
+
+**Qué probaste:** HU-11 + filtrado server-side por programa.
+
+---
+
+### Escena 7: Ver detalle y postularse (HU-12, HU-13, HU-16)
+
+**Qué decir:**
+> "Al entrar al detalle, veo toda la información relevante: docente, fecha
+> de cierre, cantidad de postulados, y los **requisitos explícitos**. Nada
+> de letra chica. El estudiante sabe antes de postularse si va a pasar o
+> no los filtros."
+
+**Qué hacer:**
+1. Clic en card de Cálculo Diferencial
+2. Muestra el header violeta gradient, la info del docente
+3. Lista de requisitos (los criterios que definimos)
+4. Señala el formulario: preguntas abiertas + criterio manual
+
+**Al llenar el formulario:**
+> "Las respuestas tienen mínimo de caracteres, el criterio manual se valida
+> contra la respuesta exacta que espera el docente. Cuando envío la
+> postulación, el motor evalúa los criterios automáticos contra los datos
+> del sistema académico, y los manuales contra mis respuestas."
+
+5. Llena con respuestas válidas y responde "Si" al criterio manual
+6. Clic "Enviar postulación"
+7. **Resultado esperado:** pantalla verde "¡Postulación enviada!"
+
+**Qué probaste:** HU-12, HU-13, HU-16.
+
+---
+
+### Escena 8: Estudiante rechazado por filtros (HU-15, HU-17) — **CLAVE**
+
+**Qué decir:**
+> "Esta es la historia de usuario más valiosa del sistema. Vamos a ver qué
+> pasa cuando un estudiante que NO cumple requisitos intenta postularse."
+
+**Qué hacer:**
+1. Logout → login como `maria@udem.edu.co` (su perfil no cumple)
+2. Mural → clic en Cálculo Diferencial
+3. Llena el formulario
+4. Envía
+5. **Resultado esperado:** pantalla roja con **lista exacta de criterios
+   fallidos** ("tu valor: 3.5, requerido: >= 4.0")
+
+**Qué decir:**
+> "El estudiante **no queda en cola** esperando al docente. El sistema lo
+> rechaza automáticamente, le explica exactamente **qué criterio no cumplió
+> y cuál era el valor esperado**. Esto le ahorra tiempo al estudiante y al
+> docente. Además, se crea una notificación de rechazo en la base de datos."
+
+**Qué probaste:** HU-15, HU-17, motor de validación.
+
+---
+
+### Escena 9: Mis Postulaciones (UX diferencial)
+
+**Qué decir:**
+> "El estudiante puede consultar el historial de todas sus postulaciones con
+> pestañas por estado: activas, aceptadas, rechazadas."
+
+**Qué hacer:**
+1. Sidebar → "Mis Postulaciones"
+2. Muestra las pestañas con contadores
+3. Cambia entre pestañas
+4. Clic en una card → te lleva de vuelta al detalle
+
+**Qué probaste:** feature de valor agregado para el estudiante.
+
+---
+
+## 🎭 ACTO 3 — El docente decide (3 min)
+
+### Escena 10: Ver candidatos filtrados (HU-19)
+
+**Qué hacer:**
+1. Logout → login como docente
+2. Sidebar → "Revisión & Asignación" → `/docente/revision`
+
+**Qué decir:**
+> "Lo primero que salta a la vista: el docente **solo ve candidatos que
+> pasaron los filtros automáticos**. María, que fue rechazada por promedio,
+> ni siquiera aparece aquí. Esto reduce el trabajo manual del docente de
+> forma dramática."
+
+2. Muestra las cards de candidatos con sus datos
+3. Señala el placeholder "Score IA: —"
+
+**Qué decir sobre el Score IA:**
+> "Ven que hay un espacio para un **Score IA** que actualmente muestra un
+> guión. Esa es la funcionalidad insignia del **Release 2**. En el próximo
+> sprint voy a integrar un modelo de lenguaje (probablemente Gemini de Google
+> por su tier gratuito generoso) que analice las respuestas abiertas de cada
+> candidato y le asigne un puntaje de afinidad con el curso. Toda la
+> arquitectura ya está lista para eso: el campo `puntajeIA` existe en la
+> base de datos, la UI tiene el espacio reservado, y el Server Action de
+> postulación es el punto de inyección natural del modelo. **Este es un
+> ejemplo concreto de cómo separar el MVP de features avanzadas.**"
+
+**Qué probaste:** HU-19 + visión de producto + roadmap defendible.
+
+---
+
+### Escena 11: Elegir monitor (HU-23, HU-24, HU-25)
+
+**Qué hacer:**
+1. Buscador: escribe parte del nombre → filtro en vivo
+2. Clic "Elegir" sobre un candidato → confirma
+3. **Resultado:** card pasa a verde con badge "Elegido"
+
+**Qué decir:**
+> "La acción crea automáticamente la notificación de resultado, cambia el
+> estado de la postulación a ACEPTADO, y el estudiante la verá tanto en su
+> detalle como en su pestaña 'Aceptadas'. Todo en una sola transacción."
+
+4. Muestra la tabla `notificaciones` en Prisma Studio — nueva fila
+
+**Qué probaste:** HU-23, HU-24, HU-25.
+
+---
+
+### Escena 12: Cerrar convocatoria (HU-09)
+
+**Qué hacer:**
+1. Vuelve a `/docente/convocatorias`
+2. Clic `⋮` en Cálculo Diferencial → "Cerrar convocatoria" → confirma
+3. Badge cambia a "Cerrada" (rojo)
+
+**Qué probaste:** HU-09 + transiciones de estado completas.
+
+---
+
+## 🎯 Cierre técnico (1–2 min)
+
+### Qué decir al final:
+
+> "Resumiendo lo que construí en este Release 1:
+>
+> - **16 historias de usuario** implementadas de las 32 totales del proyecto.
+> - **13 modelos** de base de datos, con los 6 de Release 2 ya escritos en
+>   el schema para no tener que migrar después.
+> - **Arquitectura escalable:** cuando implemente la IA en R2, solo toco
+>   3 archivos. El resto del sistema no se entera.
+> - **Decisiones de producto documentadas:** preferí wizard sobre monolito,
+>   filtrado server-side sobre cliente, validación dual Zod, notificaciones
+>   asíncronas en DB en lugar de acopladas a un proveedor de correo.
+>
+> En el Release 2 planeo agregar: Fase 2 con hoja de vida, ranking con IA,
+> seguimiento de monitorías con registro de horas, evidencias y alertas
+> automáticas."
+
+---
+
+# 🛠️ Apéndice A — Cómo probar cada HU rápidamente
+
+Si el profesor pide "muéstrame la HU-X específicamente":
+
+| HU | Cómo mostrarla |
+|----|----------------|
+| HU-01 | Login desde landing |
+| HU-05 | `/docente/convocatorias/nueva` |
+| HU-06 | Paso 2 del wizard o `/docente/criterios` |
+| HU-07 | Botón "Publicar ahora" en wizard o `⋮` menú |
+| HU-09 | `⋮` menú en convocatoria publicada → "Cerrar" |
+| HU-10 | Tabla `notificaciones` en Prisma Studio tras publicar |
+| HU-11 | `/estudiante/mural` (logueado como estudiante) |
+| HU-12 | Clic en cualquier card del mural |
+| HU-13 | Formulario en el detalle de convocatoria |
+| HU-15 | Tabla `notificaciones` tras postulación rechazada |
+| HU-16 | Postular con requisitos válidos vs inválidos |
+| HU-17 | Postular como María (no cumple) |
+| HU-19 | `/docente/revision` |
+| HU-23 | Botones "Elegir" / "Rechazar" en revisión |
+| HU-24 | Tras elegir, estado de postulación = ACEPTADO |
+| HU-25 | Tabla `notificaciones` tras elegir candidato |
+
+---
+
+# 🛠️ Apéndice B — Preguntas que puede hacer el profesor
+
+### "¿Cómo manejas la concurrencia si dos estudiantes se postulan al mismo tiempo?"
+
+> Con el constraint `@@unique([estudianteId, convocatoriaId])` en Prisma. Si
+> hay una race condition, el segundo INSERT falla con violación de unique y
+> lo manejo en el try/catch del Server Action.
+
+### "¿Por qué Server Actions y no API REST?"
+
+> Tres razones: (1) tipado end-to-end sin definir contratos duplicados,
+> (2) menos archivos — no necesito crear una ruta en `/api` para cada
+> operación, (3) Next.js maneja la serialización y el CSRF automáticamente.
+> El trade-off es que no es reutilizable por clientes externos, pero
+> MonitorIA es una app web, no una API pública.
+
+### "¿Qué pasa si la base de datos se cae?"
+
+> En el código de stats de la landing envolví las queries en try/catch
+> retornando ceros. Así la página pública nunca se rompe. En las rutas
+> autenticadas, los errores se propagan y hay `error.tsx` (si lo agregué)
+> que captura y muestra UI de recuperación.
+
+### "¿Cómo se integraría con Office 365?"
+
+> NextAuth v5 ya tiene el provider de Azure AD instalado en `lib/auth.ts`.
+> Solo falta que la universidad provea el client ID y client secret del
+> tenant institucional. El código ya lo soporta, solo está en modo dev
+> con credenciales de prueba.
+
+### "¿Cuánto cuesta mantener esto?"
+
+> Arquitectura serverless: Neon free tier (hasta 500MB), Vercel free tier
+> hasta 100GB de ancho de banda. Hoy cuesta 0 USD al mes. Si crecemos,
+> el primer paywall es Neon ~20 USD/mes y Vercel 20 USD/mes = 40 USD para
+> soportar toda una facultad.
+
+### "¿Qué modelo de IA vas a usar?"
+
+> Probablemente Gemini 1.5 Flash de Google. Razones: 1500 requests gratis
+> por día (más que suficiente para un proyecto universitario), latencia
+> ~1–2 seg, buena calidad en español, SDK oficial. La función
+> `calcularScore()` será un wrapper sobre su API, y si el día de mañana
+> quiero cambiar a Claude o GPT, solo cambio el cuerpo de esa función.
+
+### "¿Por qué no guardas las notificaciones enviadas directamente?"
+
+> Separación de intención y ejecución. El Server Action de 'publicar' debe
+> ser rápido: no puedo bloquearlo esperando que 200 correos salgan. Entonces
+> solo creo filas en `notificaciones` con estado PENDIENTE. Un worker (cron
+> job o queue) las procesará. Es el patrón outbox del libro
+> *Enterprise Integration Patterns*.
+
+---
+
+# 🛠️ Apéndice C — Checklist pre-demo (5 min antes)
+
+- [ ] `npm run dev` corriendo sin errores
+- [ ] DB Neon despierta (haz una query cualquiera para despertarla)
+- [ ] `npx prisma studio` en otra pestaña, puerto 5555
+- [ ] Logueado como docente en ventana normal
+- [ ] Ventana incógnito lista para logueo rápido como estudiante
+- [ ] Convocatoria "Estructuras de Datos" publicada con al menos 2–3
+      candidatos que pasaron filtro (si no, haz postulaciones rápidas)
+- [ ] Convocatoria "Programación Avanzada" en BORRADOR (para mostrar la
+      diferencia visual)
+- [ ] Tabla `notificaciones` limpia o con pocas filas para que se noten
+      las nuevas que se crearán en vivo
+
+---
+
+# 🗺️ Apéndice D — Qué viene en Release 2
+
+Para responder "¿y qué sigue?":
+
+| Épica | HU | Valor |
+|-------|-----|-------|
+| Autenticación institucional | HU-02, HU-03, HU-04 | Migración de modo dev a Azure AD |
+| Gestión de convocatorias | HU-08 | Editar convocatorias publicadas |
+| Postulación Fase 2 | HU-14 | Subida de hoja de vida en PDF |
+| **Ranking con IA** | **HU-20, HU-21, HU-22** | **Diferenciador del producto** |
+| Asignación formal | HU-18 | Renovación ágil semestre tras semestre |
+| Informes docentes | HU-26, HU-27 | Evaluación semanal del monitor |
+| Registro de horas | HU-28, HU-29, HU-31, HU-32 | Evidencias, horas, control |
+| Alertas automáticas | HU-30 | Detección de patrones de incumplimiento |
+
+---
+
+**Fin de la guía.**
+
+> *Última actualización: 19 de abril de 2026*

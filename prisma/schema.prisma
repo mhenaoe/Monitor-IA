@@ -1,0 +1,311 @@
+// ============================================================
+// MonitorIA — Schema Prisma
+// Universidad de Medellín · Módulo Púrpura
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Rol {
+  ESTUDIANTE
+  DOCENTE
+  MONITOR
+}
+
+enum EstadoConvocatoria {
+  BORRADOR
+  PUBLICADA
+  CERRADA
+}
+
+enum FasePostulacion {
+  FASE_1
+  FASE_2
+}
+
+enum EstadoPostulacion {
+  EN_PROCESO
+  APROBADA_FASE_1
+  APROBADA_FASE_2
+  RECHAZADA
+  ACEPTADO
+  DENEGADO
+}
+
+enum TipoCriterio {
+  AUTOMATICO_SIS
+  MANUAL
+}
+
+enum FuenteDato {
+  SISTEMA_ACADEMICO
+  FORMULARIO
+}
+
+enum TipoNotificacion {
+  PUBLICACION_CONVOCATORIA
+  RECHAZO_FASE_1
+  RESULTADO_SELECCION
+  ALERTA_INCUMPLIMIENTO
+  RECORDATORIO_SEMANAL
+}
+
+enum EstadoNotificacion {
+  PENDIENTE
+  ENVIADA
+  FALLIDA
+}
+
+enum EstadoMonitoria {
+  ACTIVA
+  FINALIZADA
+}
+
+enum EstadoMonitor {
+  ACTIVO
+  INACTIVO
+}
+
+enum EstadoRegistroHoras {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+enum TipoEvidencia {
+  FOTO
+  VIDEO
+  DOCUMENTO
+  TALLER
+  MATERIAL_ESTUDIO
+}
+
+// ─────────────────────────────────────────────
+// RELEASE 1 — MODELOS CORE
+// ─────────────────────────────────────────────
+
+model Usuario {
+  id        String   @id @default(cuid())
+  nombre    String
+  apellido  String
+  correo    String   @unique
+  rol       Rol
+  avatarUrl String?
+  activo    Boolean  @default(true)
+  creadoEn  DateTime @default(now())
+
+  estudiante     Estudiante?
+  docente        Docente?
+  notificaciones Notificacion[]
+
+  @@map("usuarios")
+}
+
+model Estudiante {
+  id                String @id @default(cuid())
+  programa          String
+  semestre          Int
+  promedioAcumulado Float
+  creditosAprobados Int
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String  @unique
+
+  postulaciones Postulacion[]
+  monitor       Monitor?
+
+  @@map("estudiantes")
+}
+
+model Docente {
+  id           String @id @default(cuid())
+  departamento String
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String  @unique
+
+  convocatorias       Convocatoria[]
+  informesSeguimiento InformeSeguimiento[]
+  monitorias          Monitoria[]
+
+  @@map("docentes")
+}
+
+model Curso {
+  id       String @id @default(cuid())
+  nombre   String
+  codigo   String @unique
+  programa String
+  semestre String
+
+  convocatorias Convocatoria[]
+  monitorias    Monitoria[]
+
+  @@map("cursos")
+}
+
+model Convocatoria {
+  id             String             @id @default(cuid())
+  fechaInicio    DateTime
+  fechaFin       DateTime
+  estado         EstadoConvocatoria @default(BORRADOR)
+  preguntasFase1 Json
+  creadoEn       DateTime           @default(now())
+  actualizadoEn  DateTime           @updatedAt
+
+  curso     Curso   @relation(fields: [cursoId], references: [id])
+  cursoId   String
+  docente   Docente @relation(fields: [docenteId], references: [id])
+  docenteId String
+
+  criterios     CriterioValidacion[]
+  postulaciones Postulacion[]
+
+  @@map("convocatorias")
+}
+
+model CriterioValidacion {
+  id       String       @id @default(cuid())
+  nombre   String
+  tipo     TipoCriterio
+  campo    String
+  operador String
+  valor    String
+  fuente   FuenteDato
+
+  convocatoria   Convocatoria @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
+  convocatoriaId String
+
+  @@map("criterios_validacion")
+}
+
+model Postulacion {
+  id               String            @id @default(cuid())
+  faseActual       FasePostulacion   @default(FASE_1)
+  estado           EstadoPostulacion @default(EN_PROCESO)
+  respuestasFase1  Json?
+  hojaDeVidaUrl    String?
+  puntajeIA        Float?
+  fechaPostulacion DateTime          @default(now())
+  actualizadoEn    DateTime          @updatedAt
+
+  estudiante     Estudiante   @relation(fields: [estudianteId], references: [id])
+  estudianteId   String
+  convocatoria   Convocatoria @relation(fields: [convocatoriaId], references: [id])
+  convocatoriaId String
+
+  monitoria Monitoria?
+
+  @@unique([estudianteId, convocatoriaId])
+  @@map("postulaciones")
+}
+
+model Notificacion {
+  id                 String             @id @default(cuid())
+  tipo               TipoNotificacion
+  destinatarioCorreo String
+  mensaje            String
+  estado             EstadoNotificacion @default(PENDIENTE)
+  fechaEnvio         DateTime?
+  creadoEn           DateTime           @default(now())
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+  usuarioId String
+
+  @@map("notificaciones")
+}
+
+// ─────────────────────────────────────────────
+// RELEASE 2 — MODELOS DE SEGUIMIENTO
+// ─────────────────────────────────────────────
+
+model Monitor {
+  id              String        @id @default(cuid())
+  fechaAsignacion DateTime      @default(now())
+  estado          EstadoMonitor @default(ACTIVO)
+
+  estudiante   Estudiante @relation(fields: [estudianteId], references: [id])
+  estudianteId String     @unique
+
+  monitorias Monitoria[]
+
+  @@map("monitores")
+}
+
+model Monitoria {
+  id             String          @id @default(cuid())
+  semestreActivo String
+  fechaInicio    DateTime
+  fechaFin       DateTime?
+  estado         EstadoMonitoria @default(ACTIVA)
+  horasTotales   Float           @default(0)
+
+  monitor       Monitor     @relation(fields: [monitorId], references: [id])
+  monitorId     String
+  curso         Curso       @relation(fields: [cursoId], references: [id])
+  cursoId       String
+  docente       Docente     @relation(fields: [docenteId], references: [id])
+  docenteId     String
+  postulacion   Postulacion @relation(fields: [postulacionId], references: [id])
+  postulacionId String      @unique
+
+  registrosHoras      RegistroHoras[]
+  evidencias          Evidencia[]
+  informesSeguimiento InformeSeguimiento[]
+
+  @@map("monitorias")
+}
+
+model RegistroHoras {
+  id               String              @id @default(cuid())
+  fecha            DateTime
+  horasRegistradas Float
+  descripcion      String
+  estado           EstadoRegistroHoras @default(PENDIENTE)
+  creadoEn         DateTime            @default(now())
+
+  monitoria   Monitoria @relation(fields: [monitoriaId], references: [id], onDelete: Cascade)
+  monitoriaId String
+
+  @@map("registros_horas")
+}
+
+model Evidencia {
+  id          String        @id @default(cuid())
+  tipo        TipoEvidencia
+  archivoUrl  String
+  fechaSubida DateTime      @default(now())
+  descripcion String?
+
+  monitoria   Monitoria @relation(fields: [monitoriaId], references: [id], onDelete: Cascade)
+  monitoriaId String
+
+  @@map("evidencias")
+}
+
+model InformeSeguimiento {
+  id                    String   @id @default(cuid())
+  semana                Int
+  fecha                 DateTime @default(now())
+  contenido             String
+  calificacionDesempeno Float
+  observaciones         String?
+
+  monitoria   Monitoria @relation(fields: [monitoriaId], references: [id], onDelete: Cascade)
+  monitoriaId String
+  docente     Docente   @relation(fields: [docenteId], references: [id])
+  docenteId   String
+
+  @@unique([monitoriaId, semana])
+  @@map("informes_seguimiento")
+}

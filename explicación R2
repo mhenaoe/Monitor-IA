@@ -1,0 +1,439 @@
+# 📘 MonitorIA — Guía de Exposición
+
+**Proyecto:** Sistema de Gestión de Monitorías Académicas
+**Universidad:** Universidad de Medellín · Módulo Púrpura
+**Release:** 2 (Sprint 3–4, Seguimiento y Automatización)
+**Autor:** Maria
+
+---
+
+## 🎯 Qué agrega el Release 2
+
+El Release 1 digitalizó el proceso de selección: desde la publicación de
+una convocatoria hasta la elección del monitor. El Release 2 cierra el
+ciclo: una vez elegido el monitor, ¿cómo se hace seguimiento de su trabajo
+durante el semestre?
+
+**Problema que resuelve R2:**
+Hoy el seguimiento es informal — un mensaje por WhatsApp, un correo
+esporádico. No hay trazabilidad de horas trabajadas, ni evidencias de las
+sesiones, ni calificaciones periódicas del desempeño. Si un monitor
+incumple, el docente se entera tarde.
+
+**Propuesta R2:**
+Un módulo de seguimiento completo: el monitor registra sus horas y sube
+evidencias de cada sesión. El docente evalúa semanalmente y el sistema
+lanza alertas automáticas si el desempeño cae por debajo del umbral. Todo
+queda trazado en la base de datos.
+
+**Valor diferencial R2:**
+Ranking con IA que analiza las respuestas abiertas de los candidatos en
+Fase 2 y le asigna a cada uno un puntaje de afinidad con el curso,
+ayudando al docente a comparar candidatos de forma objetiva.
+
+---
+
+## 🧱 Modelos nuevos en R2
+
+El schema de Prisma ya tenía estos modelos definidos desde el R1 (decisión
+de diseño: migrar una sola vez). En R2 se activan con lógica real:
+
+| Modelo | Descripción |
+|--------|-------------|
+| `Monitor` | Perfil de monitor asignado formalmente, ligado 1:1 a un Estudiante |
+| `Monitoria` | Instancia activa de una monitoría: curso, docente, semestre, horas |
+| `RegistroHoras` | Cada sesión que el monitor registra: fecha, horas, descripción, estado |
+| `Evidencia` | Archivos enlazados: foto, video, documento, taller, material de estudio |
+| `InformeSeguimiento` | Evaluación semanal del docente: calificación 0–5, contenido, observaciones |
+
+**Decisiones arquitectónicas de R2:**
+- **Asignación formal completa:** en R1 `asignarMonitor()` era un stub.
+  En R2 crea realmente el `Monitor` y la `Monitoria` en base de datos.
+- **Estado de horas:** el campo `estado` en `RegistroHoras` soporta
+  flujo de aprobación (PENDIENTE → APROBADO / RECHAZADO), preparado para
+  que el docente pueda validar horas en una futura iteración.
+- **Alertas reactivas:** al registrar un informe con calificación < 3,
+  se genera automáticamente una notificación al monitor. No hay cron job
+  para esto — es síncrono y simple.
+- **Evidencias por URL:** el monitor sube el archivo a Google Drive o
+  similar y pega el enlace. Evita costos de almacenamiento en la etapa
+  universitaria del proyecto.
+
+---
+
+## 👥 Roles y flujo en R2
+
+| Rol | Qué hace en R2 |
+|-----|----------------|
+| Docente | Completa asignación formal → registra informes semanales → consulta historial |
+| Monitor | Registra horas por sesión → sube evidencias → recibe alertas si baja su nota |
+| Estudiante | Ve resultado de su postulación (ACEPTADO) en "Mis Postulaciones" |
+
+**Usuarios de prueba sugeridos:**
+
+| Rol | Correo | Escenario |
+|-----|--------|-----------|
+| Docente | `docente@udem.edu.co` | Completa asignación, registra informes |
+| Monitor | El estudiante que fue ACEPTADO en R1 | Registra horas y evidencias |
+
+> **Nota:** para tener un monitor disponible, primero debes haber ejecutado
+> el flujo de R1: publicar convocatoria → estudiante se postula → docente
+> elige. En R2 el docente completa la asignación formal desde "Revisión &
+> Asignación".
+
+---
+
+## 🗺️ Mapa de páginas nuevas en R2
+
+```
+DOCENTE (protegidas)
+└── /docente/seguimiento             Seguimiento activo de monitorías
+    ├── Tab: Informes semanales      Registrar y consultar informes de desempeño
+    ├── Tab: Registro de horas       Ver horas reportadas por el monitor
+    └── Tab: Evidencias              Ver evidencias subidas por el monitor
+
+MONITOR (protegidas) — ROL NUEVO
+├── /monitor/horas                   Registrar horas por sesión + historial
+└── /monitor/evidencias              Subir y consultar evidencias del trabajo
+```
+
+---
+
+# 🎬 GUIÓN DE DEMO — 12 a 15 minutos
+
+> **Recomendación de preparación:**
+> 1. Ten el R1 ya demostrado o asume que la audiencia lo conoce. Esta demo
+>    arranca desde que el docente ya tiene un candidato ACEPTADO.
+> 2. Abre dos ventanas — normal (docente) e incógnito (monitor).
+> 3. Prisma Studio en otra pestaña para mostrar datos en vivo.
+> 4. Asegúrate de tener al menos una postulación con estado ACEPTADO en DB
+>    antes de empezar.
+
+---
+
+## 🎭 ACTO 1 — El docente formaliza la asignación (2 min)
+
+### Escena 1: Completar la asignación formal (HU-24 completa)
+
+**Qué decir:**
+> "En el Release 1 el botón 'Elegir' cambiaba el estado de la postulación
+> a ACEPTADO, pero la asignación formal era conceptual — no creaba entidades
+> en base de datos. En el Release 2 completamos eso. Desde 'Revisión &
+> Asignación', el docente ahora puede hacer clic en 'Asignar formalmente'
+> sobre un candidato ya aceptado, y el sistema crea el `Monitor` y la
+> `Monitoria` reales."
+
+**Qué hacer:**
+1. Login como docente → `/docente/revision`
+2. Encuentra el candidato con badge "Elegido" (estado ACEPTADO)
+3. Clic en "Asignar formalmente"
+4. Cambia a Prisma Studio → muestra tabla `monitores` y `monitorias`
+   con la fila recién creada
+
+**Qué probaste:** HU-24 completa + creación de entidades de seguimiento.
+
+---
+
+## 🎭 ACTO 2 — El monitor registra su trabajo (5 min)
+
+### Escena 2: Login como monitor y primer contacto (HU-02, HU-03, HU-04)
+
+**Qué decir:**
+> "El Release 2 activa el tercer rol del sistema: el Monitor. El sidebar
+> ahora le muestra dos secciones: 'Mis Horas' y 'Evidencias'. Es una
+> experiencia completamente diferente a la del estudiante o el docente,
+> adaptada exactamente a su responsabilidad en el proceso."
+
+**Qué hacer:**
+1. Incógnito → login como el estudiante que fue aceptado
+2. Muestra el sidebar con las dos opciones del monitor
+3. Señala que el badge "R2" de Seguimiento que tenía el docente en R1
+   ahora está habilitado y funcional
+
+**Qué probaste:** HU-02, HU-03, HU-04 — identificación automática del rol
+y acceso a funcionalidades del rol.
+
+---
+
+### Escena 3: Registrar horas de monitoría (HU-29, HU-32)
+
+**Qué decir:**
+> "La primera responsabilidad del monitor es registrar sus horas semana
+> a semana. El formulario pide fecha, cantidad de horas y una descripción
+> de qué hizo en esa sesión. Las horas quedan en estado PENDIENTE — el
+> diseño ya prevé que el docente pueda aprobarlas o rechazarlas en una
+> iteración futura."
+
+**Qué hacer:**
+1. Sidebar → "Mis Horas" → `/monitor/horas`
+2. Muestra las tres tarjetas resumen: horas registradas / aprobadas /
+   esta semana
+3. Clic en "+ Registrar horas"
+4. Llena: fecha de hoy, 2 horas, descripción "Tutoría grupo 3 —
+   ejercicios de integración por partes"
+5. Guarda
+6. Muestra la nueva fila en la lista con badge "PENDIENTE"
+
+**Qué decir sobre el diseño:**
+> "Las tarjetas resumen no son decorativas. 'Esta semana' calcula
+> dinámicamente las horas de los últimos 7 días. 'Aprobadas' filtra solo
+> los registros con estado APROBADO. Es información accionable para que
+> el monitor sepa exactamente cómo va su cumplimiento."
+
+**Qué probaste:** HU-29, HU-32.
+
+---
+
+### Escena 4: Subir evidencias (HU-28)
+
+**Qué decir:**
+> "El monitor también documenta su trabajo con evidencias: fotos de las
+> sesiones, talleres diseñados, materiales de estudio, videos. En este
+> release las evidencias se vinculan por URL — el monitor sube el archivo
+> a Google Drive y pega el enlace. Esto nos permite evitar costos de
+> almacenamiento propio en esta etapa sin sacrificar funcionalidad."
+
+**Qué hacer:**
+1. Sidebar → "Evidencias" → `/monitor/evidencias`
+2. Clic en "+ Subir evidencia"
+3. Selecciona tipo "Taller"
+4. Pega URL de ejemplo: `https://drive.google.com/file/ejemplo`
+5. Descripción: "Taller de derivadas — semana 3"
+6. Guarda
+7. Muestra la card con icono por tipo y enlace "Ver"
+
+**Qué probaste:** HU-28 + categorización de evidencias por tipo.
+
+---
+
+## 🎭 ACTO 3 — El docente hace seguimiento semanal (5 min)
+
+### Escena 5: Vista general de seguimiento (HU-26, HU-27)
+
+**Qué hacer:**
+1. Ventana normal → login como docente
+2. Sidebar → "Seguimiento" → `/docente/seguimiento`
+
+**Qué decir:**
+> "Ahora el ítem 'Seguimiento' que en el Release 1 estaba deshabilitado
+> con el badge 'R2' está completamente funcional. El docente ve una tarjeta
+> resumen del monitor asignado con tres métricas clave: horas totales
+> reportadas, horas de esta semana y cantidad de informes registrados.
+> Todo en un vistazo."
+
+3. Señala la tarjeta resumen: nombre del monitor, curso, métricas
+4. Muestra las tres pestañas: Informes semanales / Registro de horas /
+   Evidencias
+
+**En la pestaña Registro de horas:**
+> "El docente puede ver todo lo que el monitor reportó. Observa que las
+> horas de esta semana que el monitor acaba de registrar ya aparecen aquí.
+> La información fluye en tiempo real entre roles sin que ninguno tenga
+> que notificar manualmente al otro."
+
+**Qué probaste:** HU-27 — historial de desempeño consultable.
+
+---
+
+### Escena 6: Registrar informe semanal (HU-26) — **CLAVE**
+
+**Qué decir:**
+> "Cada semana el docente registra un informe de seguimiento: describe las
+> actividades del monitor y le asigna una calificación de 0 a 5. Esta
+> calificación es el indicador central del desempeño."
+
+**Qué hacer:**
+1. Pestaña "Informes semanales" → clic en "Nuevo informe"
+2. Llena: Semana 3, calificación 4.5, contenido "El monitor realizó
+   tutorías grupales con participación activa de 15 estudiantes.
+   Excelente manejo del tema de integrales.", sin observaciones
+3. Guarda → muestra la card con semana, fecha y estrella verde (≥4)
+
+**Qué probaste:** HU-26.
+
+---
+
+### Escena 7: Alerta automática por bajo desempeño (HU-30) — **CLAVE**
+
+**Qué decir:**
+> "Ahora vamos a simular el caso crítico: ¿qué pasa cuando un monitor
+> tiene mal desempeño? Voy a registrar un informe con calificación baja."
+
+**Qué hacer:**
+1. Clic en "Nuevo informe"
+2. Llena: Semana 4, calificación **2.0**, contenido "El monitor no se
+   presentó a dos de las cuatro sesiones programadas. Los estudiantes
+   reportaron falta de preparación en los temas de la semana."
+3. Guarda
+
+**Qué decir inmediatamente:**
+> "Al guardar con calificación menor a 3, el sistema generó
+> automáticamente una notificación de alerta para el monitor. Sin que
+> el docente haga nada extra. Veámosla en Prisma Studio."
+
+4. Cambia a Prisma Studio → tabla `notificaciones` → muestra la fila
+   con `tipo: ALERTA_INCUMPLIMIENTO` recién creada
+5. Señala el mensaje: "Tu calificación de desempeño en la semana 4 fue
+   2/5. Por favor comunícate con tu docente."
+
+**Qué decir:**
+> "Esto es detección reactiva: el sistema no espera a que el docente
+> le mande un correo al monitor. La alerta sale automáticamente en el
+> mismo flujo de registro. En producción, esta notificación llegaría
+> por correo institucional vía el cron job que ya diseñamos en R1."
+
+**Qué probaste:** HU-30 — alertas automáticas por incumplimiento.
+
+---
+
+### Escena 8: Recordatorios semanales (HU-31)
+
+**Qué decir:**
+> "El Release 2 también incluye un mecanismo de recordatorios semanales
+> para que los monitores no olviden registrar sus horas. La función
+> `enviarRecordatoriosSemanales()` recorre todas las monitorías activas
+> y crea notificaciones de tipo RECORDATORIO_SEMANAL para cada monitor.
+> En producción esto lo dispararía un cron job de Vercel — una línea de
+> configuración en `vercel.json`. Hoy lo tenemos listo para ese
+> siguiente paso."
+
+**Qué hacer (opcional):**
+1. Muestra el código de `enviarRecordatoriosSemanales()` en VS Code
+2. Señala el comentario: "sería llamada por un cron job"
+
+**Qué probaste:** HU-31 + diseño escalable hacia producción.
+
+---
+
+## 🎯 Cierre técnico (1–2 min)
+
+### Qué decir al final:
+
+> "Con el Release 2 el sistema está completo de punta a punta:
+>
+> - **16 historias de usuario nuevas** implementadas, completando las 32
+>   totales del proyecto.
+> - **5 modelos nuevos** activados: Monitor, Monitoria, RegistroHoras,
+>   Evidencia e InformeSeguimiento.
+> - **Tercer rol funcional:** el Monitor tiene su propia experiencia en
+>   el sistema, diferenciada de estudiante y docente.
+> - **Alertas reactivas:** sin cron jobs adicionales, el sistema detecta
+>   incumplimiento en el momento del registro.
+> - **Arquitectura lista para producción:** las notificaciones en DB,
+>   la función de recordatorios y el flujo de aprobación de horas están
+>   diseñados para conectarse a Azure Communication Services y un cron
+>   job de Vercel con cambios mínimos.
+>
+> El ciclo completo del proceso de monitorías académicas —
+> convocatoria → selección → asignación → seguimiento → alertas —
+> queda digitalizado y trazable en base de datos."
+
+---
+
+# 🛠️ Apéndice A — Cómo probar cada HU rápidamente
+
+Si el profesor pide "muéstrame la HU-X específicamente":
+
+| HU | Cómo mostrarla |
+|----|----------------|
+| HU-02 | Login como monitor → sidebar diferenciado por rol |
+| HU-03 | Sidebar muestra "Mis Horas" y "Evidencias" (rol identificado) |
+| HU-04 | Acceso denegado si intentas entrar a `/docente/seguimiento` como monitor |
+| HU-14 | Postulación Fase 2 con hoja de vida (campo `hojaDeVidaUrl` en DB) |
+| HU-18 | Renovación ágil — campo `semestreActivo` en Monitoria |
+| HU-24 | Botón "Asignar formalmente" en `/docente/revision` |
+| HU-26 | Formulario "Nuevo informe" en `/docente/seguimiento` |
+| HU-27 | Pestaña "Registro de horas" en `/docente/seguimiento` |
+| HU-28 | Formulario "Subir evidencia" en `/monitor/evidencias` |
+| HU-29 | Formulario "+ Registrar horas" en `/monitor/horas` |
+| HU-30 | Registrar informe con calificación < 3 → tabla `notificaciones` |
+| HU-31 | Función `enviarRecordatoriosSemanales()` en `lib/actions/seguimiento.ts` |
+| HU-32 | Tarjeta "Esta semana" en `/monitor/horas` |
+
+---
+
+# 🛠️ Apéndice B — Preguntas que puede hacer el profesor
+
+### "¿Por qué las evidencias son por URL y no subes el archivo directamente?"
+
+> Dos razones: (1) costo — el almacenamiento propio (S3, Cloudinary) agrega
+> complejidad de infraestructura y costos en etapa universitaria; (2) Google
+> Drive ya tiene permisos, versionado y previsualización gratis. El campo
+> `archivoUrl` en el modelo `Evidencia` no asume nada sobre el proveedor —
+> si mañana queremos S3, solo cambiamos la UI del formulario, la DB no
+> toca.
+
+### "¿Cómo funciona la alerta automática del HU-30?"
+
+> No hay un proceso separado ni un worker. Al momento de crear el
+> `InformeSeguimiento` con `calificacionDesempeno < 3`, el mismo Server
+> Action ejecuta `db.notificacion.create()` de forma síncrona antes de
+> retornar. Simple, predecible, sin dependencias externas. El trade-off
+> es que si el envío real de correo fallara, la notificación quedaría en
+> PENDIENTE y el cron job la reintentaría, igual que en R1.
+
+### "¿Qué pasa si un monitor registra horas falsas?"
+
+> Hoy las horas quedan en PENDIENTE y el docente las puede ver en la
+> pestaña de seguimiento. El modelo `RegistroHoras` tiene el campo
+> `estado` con tres valores posibles: PENDIENTE, APROBADO, RECHAZADO.
+> La UI de aprobación por parte del docente es el siguiente paso natural
+> en una R3 — la arquitectura ya lo soporta, solo falta el botón.
+
+### "¿El seguimiento funciona para múltiples monitorías?"
+
+> Sí. El selector de monitoría en `/docente/seguimiento` muestra todas
+> las monitorías activas del docente y permite cambiar entre ellas. Un
+> docente con tres cursos con monitor ve tres pestañas y puede registrar
+> informes independientes para cada una.
+
+### "¿Por qué el informe es semanal y no por sesión?"
+
+> Decisión de producto basada en el proceso real de la universidad. Los
+> docentes no están en cada sesión del monitor — el monitor trabaja de
+> forma autónoma. Lo que sí hace el docente es una revisión periódica.
+> La granularidad semanal refleja esa realidad. El constraint
+> `@@unique([monitoriaId, semana])` garantiza un solo informe por
+> semana para no tener duplicados.
+
+### "¿Cómo se integra el ranking con IA?"
+
+> El campo `puntajeIA` ya existe en la tabla `postulaciones` desde R1.
+> En R2 la función de asignación formal lee ese campo. La integración
+> real con el modelo de IA (Gemini 1.5 Flash o similar) iría en el
+> Server Action de postulación Fase 2: después de guardar la postulación,
+> se hace un llamado a la API del modelo con las respuestas abiertas y
+> el puntaje retornado se guarda en `puntajeIA`. El docente lo vería
+> automáticamente en la vista de revisión, ordenado de mayor a menor.
+
+---
+
+# 🛠️ Apéndice C — Checklist pre-demo (5 min antes)
+
+- [ ] `npm run dev` corriendo sin errores
+- [ ] DB Neon despierta (haz una query cualquiera para despertarla)
+- [ ] `npx prisma studio` en otra pestaña, puerto 5555
+- [ ] Al menos una postulación con estado `ACEPTADO` en DB
+- [ ] Login como docente en ventana normal
+- [ ] Ventana incógnito lista para login como monitor
+- [ ] Tabla `notificaciones` con pocas filas para que se noten las nuevas
+- [ ] Tabla `registros_horas` vacía o con pocos registros
+- [ ] Tabla `informes_seguimiento` vacía para hacer el demo limpio
+- [ ] Sidebar del docente muestra "Seguimiento" sin el badge "R2"
+- [ ] Sidebar del monitor muestra "Mis Horas" y "Evidencias" habilitados
+
+---
+
+# 🗺️ Apéndice D — Resumen de lo construido en R1 y R2
+
+| Release | HUs | Épicas cubiertas | Modelos activos |
+|---------|-----|------------------|-----------------|
+| R1 | 16 | Autenticación, Convocatorias, Postulación, Revisión, Notificaciones | 6 |
+| R2 | 16 | Seguimiento, Control de horas, Evidencias, Alertas, Asignación formal | 5 nuevos |
+| **Total** | **32** | **Todas las épicas del proyecto** | **11** |
+
+---
+
+**Fin de la guía.**
+
+> *Última actualización: Mayo de 2026*
