@@ -96,21 +96,21 @@ export function LoginClient({ stats }: LoginClientProps) {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <RolCard
-            icon={<GraduationCap className="w-5 h-5 text-violet-400" />}
+            icon={<GraduationCap className="w-5 h-5 text-violet-500" />}
             label="DOCENTE"
             titulo="Gestiona tus convocatorias"
             desc="Crea convocatorias, define un periodo, selección, aprobación y haz seguimiento al trabajo de tus monitores asignados."
             onClick={() => router.push("/login/docente")}
           />
           <RolCard
-            icon={<BookOpen className="w-5 h-5 text-violet-400" />}
+            icon={<BookOpen className="w-5 h-5 text-violet-500" />}
             label="ESTUDIANTE"
             titulo="Postúlate como monitor"
             desc="Consulta las convocatorias activas en tu programa, compara tu afinidad con cada curso y conoce el resultado de tu postulación."
             onClick={() => router.push("/login/estudiante")}
           />
           <RolCard
-            icon={<Users className="w-5 h-5 text-violet-400" />}
+            icon={<Users className="w-5 h-5 text-violet-500" />}
             label="MONITOR"
             titulo="Gestiona tu monitoría"
             desc="Registra las sesiones impartidas, sube evidencias de los temas vistos y cumple tu plan de trabajo de tu asignatura."
@@ -162,17 +162,17 @@ function RolCard({
   return (
     <button
       onClick={onClick}
-      className="bg-gray-900 hover:bg-gray-800 rounded-2xl p-6 text-left transition-colors group relative overflow-hidden"
+      className="bg-white hover:bg-violet-50 border border-violet-200 hover:border-violet-400 rounded-2xl p-6 text-left transition-all group relative overflow-hidden shadow-sm hover:shadow-md hover:shadow-violet-100"
     >
-      <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center mb-4">
+      <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center mb-4 group-hover:bg-violet-200 transition-colors">
         {icon}
       </div>
-      <span className="text-xs font-semibold text-gray-400 tracking-widest uppercase">
+      <span className="text-xs font-semibold text-violet-500 tracking-widest uppercase">
         {label}
       </span>
-      <h3 className="text-xl font-bold text-white mt-1 mb-3">{titulo}</h3>
-      <p className="text-sm text-gray-400 leading-relaxed mb-5">{desc}</p>
-      <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-400 group-hover:gap-2 transition-all">
+      <h3 className="text-xl font-bold text-gray-900 mt-1 mb-3">{titulo}</h3>
+      <p className="text-sm text-gray-500 leading-relaxed mb-5">{desc}</p>
+      <span className="inline-flex items-center gap-1 text-sm font-medium text-violet-600 group-hover:gap-2 transition-all">
         Ingresar
         <ArrowRight className="w-4 h-4" />
       </span>

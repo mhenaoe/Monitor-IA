@@ -65,7 +65,7 @@ export function LoginRolClient({ rol }: LoginRolClientProps) {
     });
 
     if (result?.error || !result?.ok) {
-      setError("Usuario no encontrado. Verifica el correo o ejecuta el seed.");
+      setError("Credencial no válida. Vuelve a intentarlo.");
       setIsLoading(false);
     } else {
       window.location.href = "/";
